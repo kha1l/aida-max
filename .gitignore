@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.env
+.venv/
+
+# Logs
+logs/
+*.log
+
+# Poetry
+.cache/
+*.lock
+
+# IDEs
+.idea/
+.vscode/
+*.iml

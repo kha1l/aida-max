@@ -8,6 +8,7 @@ from maxo.fsm.key_builder import DefaultKeyBuilder
 from maxo.fsm.storages.redis import RedisStorage
 from maxo.transport.long_polling import LongPolling
 from maxo.types.bot_command import BotCommand
+from loguru import logger
 
 from bot.handlers.error_handlers import router as error_router
 from bot.handlers.menu_handlers import router as menu_router
@@ -28,20 +29,24 @@ setup_logging("aida_max")
 
 async def _sync_bot_commands(bot: Bot) -> None:
     """Регистрирует команды бота в MAX."""
-    await bot.edit_bot_info(
-        commands=[
-            BotCommand(
-                name="/start",
-                description="Открыть главное меню",
-            ),
-        ]
-    )
+    try:
+        await bot.edit_bot_info(
+            commands=[
+                BotCommand(
+                    name="/start",
+                    description="Открыть главное меню",
+                ),
+            ]
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to sync MAX bot commands", error=str(exc))
 
 
 async def main() -> None:
     """Запускает базовый runtime `aida_max` для поэтапной миграции с aiogram."""
     cfg: Config = load_config()
     bot = Bot(cfg.bot.token)
+    await bot.start()
     await _sync_bot_commands(bot)
 
     storage = RedisStorage(

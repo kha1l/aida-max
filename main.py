@@ -45,7 +45,7 @@ async def main() -> None:
     await _sync_bot_commands(bot)
 
     storage = RedisStorage(
-        redis=RedisCache(db=0).get_redis(),
+        redis=RedisCache(db=1).get_redis(),
         key_builder=DefaultKeyBuilder(with_destiny=True),
         state_ttl=3600,
         data_ttl=3600,

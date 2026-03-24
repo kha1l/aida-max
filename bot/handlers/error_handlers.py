@@ -10,6 +10,7 @@ from maxo.routing.updates import ErrorEvent, MessageCallback, MessageCreated
 from maxo.utils.facades import ErrorEventFacade
 
 from bot.dialogs.texts import MenuTexts
+from bot.helpers.maxo import resolve_message_chat_id
 from services.i18n import tr
 
 router = Router()
@@ -35,4 +36,6 @@ async def on_error(
         return
 
     if isinstance(event, MessageCreated):
-        await facade.bot.send_message(chat_id=event.message.recipient.chat_id, text=message)
+        chat_id = resolve_message_chat_id(event)
+        if chat_id is not None:
+            await facade.bot.send_message(chat_id=chat_id, text=message)

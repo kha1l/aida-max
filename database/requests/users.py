@@ -19,19 +19,33 @@ class PlatformUser:
     id: int
 
 
-async def get_user_id(session: AsyncSession, tg_user: PlatformUser) -> int | None:
-    """Возвращает внутренний user_id только для пользователей `platform='max'`."""
+def _resolve_lookup_platform_id(tg_user: PlatformUser, chat_id: int | None = None) -> int:
+    """Для MAX считаем основным внешним идентификатором chat_id диалога."""
+    return int(chat_id if chat_id is not None else tg_user.id)
+
+
+async def get_user_id(
+    session: AsyncSession,
+    tg_user: PlatformUser,
+    chat_id: int | None = None,
+) -> int | None:
+    """Возвращает внутренний user_id для пользователей `platform='max'`."""
+    platform_id = _resolve_lookup_platform_id(tg_user, chat_id)
     stmt = select(User.id).where(
         User.platform == "max",
-        User.platform_id == tg_user.id,
+        User.platform_id == platform_id,
     )
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
 
-async def get_user_context(session: AsyncSession, tg_user: PlatformUser) -> dict[str, Any] | None:
+async def get_user_context(
+    session: AsyncSession,
+    tg_user: PlatformUser,
+    chat_id: int | None = None,
+) -> dict[str, Any] | None:
     """Собирает контекст пользователя: аккаунты, свойства и заведения."""
-    user_id = await get_user_id(session, tg_user)
+    user_id = await get_user_id(session, tg_user, chat_id)
     if not user_id:
         return None
 

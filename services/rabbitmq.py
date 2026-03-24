@@ -12,6 +12,7 @@ from loguru import logger
 from maxo import Bot
 from maxo.enums import TextFormat
 from maxo.types.inline_keyboard_attachment import InlineKeyboardAttachment
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.keyboards.report_actions import build_report_keyboard
@@ -50,10 +51,18 @@ async def _resolve_chat_translator(
     if session_maker is None:
         return lambda message: message
 
-    async with session_maker() as session:
-        language = await get_chat_language(session, chat_id)
-        if not language:
-            language = await get_default_chat_language(session, chat_id)
+    try:
+        async with session_maker() as session:
+            language = await get_chat_language(session, chat_id)
+            if not language:
+                language = await get_default_chat_language(session, chat_id)
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "Не удалось загрузить язык чата для RabbitMQ-доставки, используем ru по умолчанию",
+            chat_id=chat_id,
+            error=str(exc),
+        )
+        language = "ru"
     return get_translator(language=language or "ru")
 
 

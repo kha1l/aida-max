@@ -10,6 +10,7 @@ from maxo import Router
 from maxo.routing.updates import MessageCallback
 from maxo.utils.facades import MessageCallbackFacade
 
+from bot.helpers.maxo import resolve_callback_chat_id
 from bot.callback.report_actions import (
     DrinkThresholdPayload,
     HideReportPayload,
@@ -35,6 +36,11 @@ DIRECT_REPORT_ACTIONS = {
     "later_rest",
     "assembly_rest",
 }
+
+
+def _require_callback_chat_id(callback: MessageCallback) -> int:
+    """Возвращает `chat_id` диалога, а если его нет — fallback на `user.id`."""
+    return resolve_callback_chat_id(callback) or int(getattr(callback.user, "id"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,11 +100,11 @@ async def _launch_manual_report(
         return
 
     config = config or load_config()
-    chat_id = callback.unsafe_message.recipient.chat_id
+    chat_id = _require_callback_chat_id(callback)
     op_config: dict[str, Any] = {
         "unit_uuid": unit_uuid,
         "account_id": int(account_id),
-        "chat_id": int(chat_id) if chat_id is not None else int(getattr(callback.user, "id")),
+        "chat_id": int(chat_id),
         "message_date": callback.unsafe_message.timestamp.isoformat(),
     }
     if extra_op_config:

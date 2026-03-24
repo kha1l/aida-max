@@ -44,19 +44,22 @@ class UserContextMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
         if session is None or tg_user is None:
             return await next(ctx)
 
-        user_ctx = await get_user_context(session, tg_user)
         event_chat = ctx.get("event_chat")
+        current_chat_id = getattr(event_chat, "id", None)
+        user_ctx = await get_user_context(session, tg_user, current_chat_id)
         if user_ctx is None:
             logger.warning(
                 "Пользователь не найден в базе данных",
-                telegram_id=getattr(tg_user, "id", None),
+                platform_id=current_chat_id,
+                max_id=getattr(tg_user, "id", None),
                 user_id=getattr(tg_user, "id", None),
-                chat_id=getattr(event_chat, "id", None),
+                chat_id=current_chat_id,
             )
         else:
             logger.success(
                 "Пользователь успешно загружен из базы данных",
-                telegram_id=getattr(tg_user, "id", None),
+                platform_id=current_chat_id,
+                max_id=getattr(tg_user, "id", None),
                 user_id=user_ctx.get("user_id"),
             )
 

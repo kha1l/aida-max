@@ -7,6 +7,7 @@ from maxo import Bot, Dispatcher
 from maxo.fsm.key_builder import DefaultKeyBuilder
 from maxo.fsm.storages.redis import RedisStorage
 from maxo.transport.long_polling import LongPolling
+from maxo.types.bot_command import BotCommand
 
 from bot.handlers.error_handlers import router as error_router
 from bot.handlers.menu_handlers import router as menu_router
@@ -25,10 +26,23 @@ from services.rabbitmq import rabbit_listener
 setup_logging("aida_max")
 
 
+async def _sync_bot_commands(bot: Bot) -> None:
+    """Регистрирует команды бота в MAX."""
+    await bot.edit_bot_info(
+        commands=[
+            BotCommand(
+                name="/start",
+                description="Открыть главное меню",
+            ),
+        ]
+    )
+
+
 async def main() -> None:
     """Запускает базовый runtime `aida_max` для поэтапной миграции с aiogram."""
     cfg: Config = load_config()
     bot = Bot(cfg.bot.token)
+    await _sync_bot_commands(bot)
 
     storage = RedisStorage(
         redis=RedisCache(db=0).get_redis(),

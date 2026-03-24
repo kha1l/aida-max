@@ -1,4 +1,4 @@
-"""Конфигурация `aida3`, собираемая из переменных окружения."""
+"""Конфигурация `aida_max`, собираемая из переменных окружения."""
 
 from dataclasses import dataclass
 from environs import Env
@@ -6,7 +6,7 @@ from environs import Env
 
 @dataclass
 class Bot:
-    """Настройки Telegram-бота."""
+    """Настройки MAX-бота."""
     token: str
 
 
@@ -34,6 +34,13 @@ class Rabbit:
 
 
 @dataclass
+class MaxAuth:
+    """Параметры внешнего MAX auth/bind flow."""
+    bind_url: str | None
+    request_timeout_seconds: int
+
+
+@dataclass
 class Dagster:
     """Параметры запуска Dagster job через GraphQL."""
     graphql_url: str | None
@@ -51,6 +58,7 @@ class Config:
     dbase: Database
     redis: Redis
     rabbit: Rabbit
+    max_auth: MaxAuth
     dagster: Dagster
 
 
@@ -68,11 +76,15 @@ def load_config(path: str | None = None) -> Config:
         ),
         redis=Redis(
             host=env.str("REDIS_HOST"),
-            port=env.str("REDIS_PORT")
+            port=env.int("REDIS_PORT"),
         ),
         rabbit=Rabbit(
             url=env.str("RABBIT_URL"),
             queue=env.str("RABBIT_QUEUE", "aida_max"),
+        ),
+        max_auth=MaxAuth(
+            bind_url=env.str("MAX_BIND_URL", "").strip() or None,
+            request_timeout_seconds=env.int("MAX_BIND_REQUEST_TIMEOUT_SECONDS", 15),
         ),
         dagster=Dagster(
             graphql_url=env.str("DAGSTER_GRAPHQL_URL", "").strip() or None,

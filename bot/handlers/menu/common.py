@@ -183,7 +183,7 @@ def live_data_result_text(
         "tracking": "🛰 Tracking",
         "metrics": "📅 Key metrics",
         "revenue": "💵 Network revenue",
-        "stock": "🚚 Large stock balances",
+        "stock": "🚚 Stock balances",
     }
     label = _(label_map.get(operation, operation))
     names = selected_unit_names(selected, user_ctx)

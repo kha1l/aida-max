@@ -26,7 +26,8 @@ class MaxBindResult:
 async def bind_max_account(
     *,
     bind_url: str | None,
-    account_id: int,
+    account_id: int | None = None,
+    account_name: str | None = None,
     max_id: int,
     chat_id: int | None = None,
     username: str = "",
@@ -36,9 +37,12 @@ async def bind_max_account(
     """Вызывает внешний bind endpoint и связывает MAX user с account."""
     if not bind_url:
         raise MaxBindError("MAX_BIND_URL is not configured")
+    if account_id is None and not account_name:
+        raise MaxBindError("account_id or account_name is required")
 
     payload = {
         "account_id": account_id,
+        "account_name": account_name,
         "max_id": max_id,
         "chat_id": chat_id,
         "username": username,

@@ -46,15 +46,24 @@ async def start_(
     """Стартовый `/start`: при наличии payload связывает MAX user с account и открывает меню."""
     user_name = resolve_user_display_name(event_from_user)
     start_payload = _extract_start_payload(message.text)
+    account_id: int | None = None
+    account_name: str | None = None
+    if start_payload:
+        if start_payload.isdigit():
+            account_id = int(start_payload)
+        else:
+            account_name = start_payload
+
     # Для MAX главным идентификатором диалога считаем именно `chat_id`,
     # потому что в него потом будут приходить все отправки из RabbitMQ.
     current_chat_id = resolve_message_chat_id(message)
 
-    if not user_ctx and start_payload and start_payload.isdigit() and event_from_user is not None and session is not None and config is not None:
+    if not user_ctx and start_payload and event_from_user is not None and session is not None and config is not None:
         try:
             await bind_max_account(
                 bind_url=config.max_auth.bind_url,
-                account_id=int(start_payload),
+                account_id=account_id,
+                account_name=account_name,
                 max_id=int(getattr(event_from_user, "id")),
                 chat_id=int(current_chat_id) if current_chat_id is not None else None,
                 username=str(getattr(event_from_user, "username", "") or ""),
@@ -70,7 +79,8 @@ async def start_(
                 "MAX user successfully bound to account",
                 platform_id=int(current_chat_id) if current_chat_id is not None else None,
                 max_id=getattr(event_from_user, "id", None),
-                account_id=int(start_payload),
+                account_id=account_id,
+                account_name=account_name,
                 user_id=user_ctx.get("user_id") if user_ctx else None,
             )
         except MaxBindError as exc:
@@ -78,7 +88,8 @@ async def start_(
                 "Failed to bind MAX user to account",
                 platform_id=int(current_chat_id) if current_chat_id is not None else None,
                 max_id=getattr(event_from_user, "id", None),
-                account_id=int(start_payload),
+                account_id=account_id,
+                account_name=account_name,
                 error=str(exc),
             )
             await facade.answer_text(

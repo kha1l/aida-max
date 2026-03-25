@@ -8,8 +8,10 @@ from loguru import logger
 from maxo.routing.ctx import Ctx
 from maxo.routing.interfaces.middleware import BaseMiddleware, NextMiddleware
 from maxo.routing.signals.update import MaxoUpdate
+from maxo.routing.updates import MessageCallback, MessageCreated
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from bot.helpers.maxo import resolve_callback_chat_id, resolve_message_chat_id
 from database.requests.users import get_user_context
 
 
@@ -33,6 +35,28 @@ class DBSessionMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
 class UserContextMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
     """Подгружает контекст пользователя и кладет его в `ctx` для хендлеров."""
 
+    @staticmethod
+    def _resolve_chat_id(update: MaxoUpdate[Any], ctx: Ctx) -> int | None:
+        """Пытается достать chat_id из ctx, а если его нет — из сырых MAX update-объектов."""
+        event_chat = ctx.get("event_chat")
+        current_chat_id = getattr(event_chat, "id", None)
+        if current_chat_id is not None:
+            return int(current_chat_id)
+
+        event = ctx.get("event")
+        if isinstance(event, MessageCallback):
+            return resolve_callback_chat_id(event)
+        if isinstance(event, MessageCreated):
+            return resolve_message_chat_id(event)
+
+        # На всякий случай пробуем и сам transport update, если `ctx["event"]`
+        # не был обогащен ожидаемым объектом.
+        if isinstance(update, MessageCallback):
+            return resolve_callback_chat_id(update)
+        if isinstance(update, MessageCreated):
+            return resolve_message_chat_id(update)
+        return None
+
     async def __call__(
         self,
         update: MaxoUpdate[Any],
@@ -44,8 +68,7 @@ class UserContextMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
         if session is None or tg_user is None:
             return await next(ctx)
 
-        event_chat = ctx.get("event_chat")
-        current_chat_id = getattr(event_chat, "id", None)
+        current_chat_id = self._resolve_chat_id(update, ctx)
         user_ctx = await get_user_context(session, tg_user, current_chat_id)
         if user_ctx is None:
             logger.warning(

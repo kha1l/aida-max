@@ -97,7 +97,7 @@ def reports_menu_keyboard(_: Translator):
         section="reports",
         items=[
             ("🚛 Courier reports", "couriers"),
-            ("🍳 Restaurant delays", "stationary"),
+            ("🍳 Restaurant reports", "stationary"),
             ("📅 Key metrics", "metrics"),
             ("💵 Network revenue", "revenue"),
             ("🚚 Stock balances", "stock"),
@@ -114,7 +114,7 @@ def live_data_menu_keyboard(_: Translator):
         items=[
             ("📊 Current metrics", "metrics"),
             ("💵 Network revenue", "revenue"),
-            ("🚚 Large stock balances", "stock"),
+            ("🚚 Stock balances", "stock"),
             ("🛰 Tracking", "tracking"),
         ],
     )

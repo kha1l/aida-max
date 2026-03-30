@@ -204,7 +204,7 @@ async def on_waiting_threshold(
         post=payload.post,
         report_config=MANUAL_REPORT_CONFIGS["waiting"],
         user_ctx=user_ctx,
-        extra_op_config={"threshold_minutes": payload.minutes},
+        extra_op_config={"wait_threshold_seconds": payload.minutes * 60},
         extra_tags={"threshold_minutes": str(payload.minutes)},
         translate=_,
     )
@@ -227,7 +227,7 @@ async def on_drink_threshold(
         post=payload.post,
         report_config=MANUAL_REPORT_CONFIGS["drink_rest"],
         user_ctx=user_ctx,
-        extra_op_config={"threshold_minutes": payload.minutes},
+        extra_op_config={"drink_threshold_seconds": payload.minutes * 60},
         extra_tags={"threshold_minutes": str(payload.minutes)},
         translate=_,
     )

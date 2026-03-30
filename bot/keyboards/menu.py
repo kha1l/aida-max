@@ -99,6 +99,7 @@ def reports_menu_keyboard(_: Translator):
             ("🚛 Courier reports", "couriers"),
             ("🍳 Restaurant reports", "stationary"),
             ("📅 Key metrics", "metrics"),
+            ("📈 Ratings RKO/RS", "ratings"),
             ("💵 Network revenue", "revenue"),
             ("🚚 Stock balances", "stock"),
             ("🗑 Write-offs", "writeoff"),

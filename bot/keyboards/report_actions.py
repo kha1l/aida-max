@@ -24,10 +24,6 @@ HIDE_ONLY_POSTS = {
     "later_rest",
     "assembly_rest",
     "drink_rest",
-    "tracking",
-    "metrics",
-    "revenue",
-    "stock",
 }
 WAITING_THRESHOLD_VALUES_MINUTES = (1, 2, 3, 5, 10)
 DRINK_THRESHOLD_VALUES_MINUTES = (1, 2, 3, 4, 5)
@@ -46,7 +42,7 @@ STATIONARY_REPORT_BUTTONS = (
 
 
 def _hide_row(translate: Translator):
-    return [("🔄 Hide report", HideReportPayload().pack())]
+    return [(translate("🔄 Hide report"), HideReportPayload().pack())]
 
 
 def _with_hide(keyboard: list[list[tuple[str, str]]] | None, translate: Translator):

@@ -29,6 +29,7 @@ from .common import (
     require_callback_chat_id,
     section_keyboard,
     section_title,
+    settings_text,
     subscription_title,
 )
 
@@ -40,6 +41,7 @@ async def on_main_menu(
     callback: MessageCallback,
     facade: MessageCallbackFacade,
     payload: MainMenuPayload,
+    user_ctx: dict[str, object] | None = None,
     _: Callable[[str], str] = lambda s: s,
 ) -> None:
     """Обрабатывает простые действия главного меню."""
@@ -47,7 +49,7 @@ async def on_main_menu(
 
     if action == "settings":
         await facade.edit_message(
-            text=_(MenuTexts.SETTINGS_TITLE),
+            text=settings_text(_, user_ctx),
             keyboard=settings_menu_keyboard(_),
             format=TextFormat.HTML,
         )

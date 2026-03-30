@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from typing import Callable
 
 from maxo.routing.updates import MessageCallback
@@ -65,6 +66,23 @@ def require_callback_chat_id(callback: MessageCallback) -> int:
 def main_menu_text(_: Callable[[str], str]) -> str:
     """Текст-заголовок главного меню."""
     return _("Choose an action:")
+
+
+def settings_text(_: Callable[[str], str], user_ctx: dict[str, object] | None) -> str:
+    """Текст экрана настроек со списком аккаунтов пользователя."""
+    accounts = []
+    for account in (user_ctx or {}).get("accounts", []):
+        if not isinstance(account, dict):
+            continue
+        account_name = str(account.get("name") or "").strip()
+        if account_name:
+            accounts.append(html.escape(account_name))
+
+    if not accounts:
+        return _(MenuTexts.SETTINGS_TITLE)
+
+    account_lines = "\n".join(f"    {name}" for name in accounts)
+    return f"{_('Your accounts:')}\n{account_lines}\n{_(MenuTexts.SETTINGS_TITLE)}"
 
 
 def section_title(_: Callable[[str], str], section: str) -> str:

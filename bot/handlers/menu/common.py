@@ -29,7 +29,7 @@ NOTIFICATION_ITEMS = {
     "refusal",
     "defect",
 }
-REPORT_ITEMS = {"couriers", "stationary", "metrics", "revenue", "stock", "writeoff"}
+REPORT_ITEMS = {"couriers", "stationary", "ratings", "metrics", "revenue", "stock", "writeoff"}
 LIVE_DATA_JOB_CONFIGS = {
     "tracking": {
         "job_name": "tracking_job",

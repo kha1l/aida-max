@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+from urllib.parse import unquote
 
 from loguru import logger
 from maxo import Router
-from maxo.routing.filters import CommandStart
-from maxo.routing.updates import MessageCreated
-from maxo.utils.facades import MessageCreatedFacade
+from maxo.routing.filters import CommandStart, DeeplinkFilter
+from maxo.routing.updates import BotStarted, MessageCreated
+from maxo.utils.facades import BotStartedFacade, MessageCreatedFacade
 
-from bot.helpers.maxo import resolve_message_chat_id, resolve_user_display_name
+from bot.helpers.maxo import resolve_user_display_name
 from bot.dialogs.texts import MenuTexts
 from config import Config
 from bot.keyboards.info import new_account
@@ -22,15 +23,127 @@ from services.max_auth import MaxBindError, bind_max_account
 router = Router()
 
 
-def _extract_start_payload(text: str | None) -> str | None:
-    """Достает payload из команды `/start <payload>`, если он есть."""
-    raw = (text or "").strip()
-    if not raw:
-        return None
-    parts = raw.split(maxsplit=1)
-    if len(parts) < 2:
-        return None
-    return parts[1].strip() or None
+def _extract_legacy_account_payload(deeplink: str | None) -> tuple[int | None, str | None]:
+    """Достает account_id из старого числового payload, если ссылка еще старого формата."""
+    raw = unquote(str(deeplink or "").strip())
+    if raw.isdigit():
+        return int(raw), None
+    return None, None
+
+
+def _resolve_user_id(user: Any) -> int:
+    return int(getattr(user, "id", None) or getattr(user, "user_id"))
+
+
+def _resolve_username(user: Any) -> str:
+    return str(getattr(user, "username", "") or "")
+
+
+def _resolve_full_name(user: Any) -> str:
+    return str(
+        getattr(user, "fullname", None)
+        or getattr(user, "first_name", None)
+        or getattr(user, "name", None)
+        or ""
+    )
+
+
+@router.bot_started(DeeplinkFilter())
+async def deeplink_start_(
+    bot_started: BotStarted,
+    facade: BotStartedFacade,
+    deeplink: str,
+    user_ctx: dict[str, Any] | None = None,
+    _: Callable[[str], str] = lambda s: s,
+    event_from_user: Any | None = None,
+    session: Any | None = None,
+    config: Config | None = None,
+) -> None:
+    """Привязывает MAX-пользователя к account из deeplink и открывает меню."""
+    max_user = event_from_user or bot_started.user
+    user_name = resolve_user_display_name(max_user)
+    current_chat_id = int(bot_started.chat_id)
+
+    if session is None or config is None:
+        await facade.send_message(
+            "Не удалось завершить авторизацию MAX. Пожалуйста, попробуйте еще раз.",
+        )
+        return
+
+    deeplink_payload = unquote(str(deeplink).strip())
+    account_id, account_name = _extract_legacy_account_payload(deeplink_payload)
+
+    try:
+        await bind_max_account(
+            bind_url=config.max_auth.bind_url,
+            deeplink=deeplink_payload,
+            account_id=account_id,
+            account_name=account_name,
+            max_id=_resolve_user_id(max_user),
+            chat_id=current_chat_id,
+            username=_resolve_username(max_user),
+            name=_resolve_full_name(max_user),
+            timeout_seconds=config.max_auth.request_timeout_seconds,
+        )
+        user_ctx = await get_user_context(session, max_user, current_chat_id)
+        logger.info(
+            "MAX user successfully bound to account from deeplink",
+            platform_id=current_chat_id,
+            max_id=_resolve_user_id(max_user),
+            account_id=account_id,
+            account_name=account_name,
+            user_id=user_ctx.get("user_id") if user_ctx else None,
+        )
+    except MaxBindError as exc:
+        logger.warning(
+            "Failed to bind MAX user to account from deeplink",
+            platform_id=current_chat_id,
+            max_id=_resolve_user_id(max_user),
+            account_id=account_id,
+            account_name=account_name,
+            error=str(exc),
+        )
+        await facade.send_message(
+            "Не удалось завершить авторизацию MAX. Пожалуйста, начните авторизацию заново из marketplace.",
+        )
+        return
+
+    if not user_ctx:
+        await facade.send_message(
+            tr(_, MenuTexts.AUTH_REQUIRED_MESSAGE, user_name=user_name),
+            keyboard=new_account(_),
+        )
+        return
+
+    await facade.send_message(
+        tr(_, MenuTexts.MAIN_GREETING, user_name=user_name),
+        keyboard=main_menu_keyboard(_),
+    )
+
+
+@router.bot_started()
+async def bot_started_(
+    bot_started: BotStarted,
+    facade: BotStartedFacade,
+    user_ctx: dict[str, Any] | None = None,
+    _: Callable[[str], str] = lambda s: s,
+    event_from_user: Any | None = None,
+) -> None:
+    """Открывает меню при обычном запуске MAX-бота без deeplink."""
+    max_user = event_from_user or bot_started.user
+    user_name = resolve_user_display_name(max_user)
+
+    if not user_ctx:
+        await facade.send_message(
+            tr(_, MenuTexts.AUTH_REQUIRED_MESSAGE, user_name=user_name),
+            keyboard=new_account(_),
+        )
+        return
+
+    await facade.send_message(
+        tr(_, MenuTexts.MAIN_GREETING, user_name=user_name),
+        keyboard=main_menu_keyboard(_),
+    )
 
 
 @router.message_created(CommandStart())
@@ -40,62 +153,9 @@ async def start_(
     user_ctx: dict[str, Any] | None = None,
     _: Callable[[str], str] = lambda s: s,
     event_from_user: Any | None = None,
-    session: Any | None = None,
-    config: Config | None = None,
 ) -> None:
-    """Стартовый `/start`: при наличии payload связывает MAX user с account и открывает меню."""
+    """Открывает меню по текстовой команде `/start`."""
     user_name = resolve_user_display_name(event_from_user)
-    start_payload = _extract_start_payload(message.text)
-    account_id: int | None = None
-    account_name: str | None = None
-    if start_payload:
-        if start_payload.isdigit():
-            account_id = int(start_payload)
-        else:
-            account_name = start_payload
-
-    # Для MAX главным идентификатором диалога считаем именно `chat_id`,
-    # потому что в него потом будут приходить все отправки из RabbitMQ.
-    current_chat_id = resolve_message_chat_id(message)
-
-    if not user_ctx and start_payload and event_from_user is not None and session is not None and config is not None:
-        try:
-            await bind_max_account(
-                bind_url=config.max_auth.bind_url,
-                account_id=account_id,
-                account_name=account_name,
-                max_id=int(getattr(event_from_user, "id")),
-                chat_id=int(current_chat_id) if current_chat_id is not None else None,
-                username=str(getattr(event_from_user, "username", "") or ""),
-                name=str(getattr(event_from_user, "fullname", None) or getattr(event_from_user, "first_name", None) or ""),
-                timeout_seconds=config.max_auth.request_timeout_seconds,
-            )
-            user_ctx = await get_user_context(
-                session,
-                event_from_user,
-                int(current_chat_id) if current_chat_id is not None else None,
-            )
-            logger.info(
-                "MAX user successfully bound to account",
-                platform_id=int(current_chat_id) if current_chat_id is not None else None,
-                max_id=getattr(event_from_user, "id", None),
-                account_id=account_id,
-                account_name=account_name,
-                user_id=user_ctx.get("user_id") if user_ctx else None,
-            )
-        except MaxBindError as exc:
-            logger.warning(
-                "Failed to bind MAX user to account",
-                platform_id=int(current_chat_id) if current_chat_id is not None else None,
-                max_id=getattr(event_from_user, "id", None),
-                account_id=account_id,
-                account_name=account_name,
-                error=str(exc),
-            )
-            await facade.answer_text(
-                "Не удалось завершить авторизацию MAX. Пожалуйста, начните авторизацию заново из marketplace.",
-            )
-            return
 
     if not user_ctx:
         await facade.answer_text(

@@ -59,8 +59,8 @@
    - `special.tokens`
    - `special.units`
    - `special.subscribes`
-4. Пользователь редиректится в MAX-бота с `/start <account_id>`.
-5. `aida_max` вызывает bind endpoint в `dodovkus`.
+4. Пользователь открывает MAX-бота по deeplink с подписанным payload.
+5. `aida_max` ловит `BotStarted` через `DeeplinkFilter` и вызывает bind endpoint в `dodovkus`.
 6. В bind-flow создаются и связываются:
    - `special.users`
    - `special.user_account`

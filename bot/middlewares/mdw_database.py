@@ -8,7 +8,7 @@ from loguru import logger
 from maxo.routing.ctx import Ctx
 from maxo.routing.interfaces.middleware import BaseMiddleware, NextMiddleware
 from maxo.routing.signals.update import MaxoUpdate
-from maxo.routing.updates import MessageCallback, MessageCreated
+from maxo.routing.updates import BotStarted, MessageCallback, MessageCreated
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.helpers.maxo import resolve_callback_chat_id, resolve_message_chat_id
@@ -48,6 +48,8 @@ class UserContextMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
             return resolve_callback_chat_id(event)
         if isinstance(event, MessageCreated):
             return resolve_message_chat_id(event)
+        if isinstance(event, BotStarted):
+            return int(event.chat_id)
 
         # На всякий случай пробуем и сам transport update, если `ctx["event"]`
         # не был обогащен ожидаемым объектом.
@@ -55,6 +57,8 @@ class UserContextMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
             return resolve_callback_chat_id(update)
         if isinstance(update, MessageCreated):
             return resolve_message_chat_id(update)
+        if isinstance(update, BotStarted):
+            return int(update.chat_id)
         return None
 
     async def __call__(

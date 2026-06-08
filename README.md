@@ -16,10 +16,12 @@
 - `user_id` — идентификатор пользователя MAX;
 - `chat_id` — идентификатор диалога, куда бот реально отправляет сообщения.
 
-В `aida_max` ключевым внешним идентификатором считается именно `chat_id`.
+В `aida_max` пользователь привязан к `user_id`, а отчеты и подписки — к `chat_id`.
+Так групповые чаты работают так же, как в Telegram: права берутся у пользователя,
+который нажал кнопку, а сообщения уходят в текущий чат.
 
 Поэтому:
-- в `special.users.platform_id` для `platform='max'` мы храним `chat_id`;
+- в `special.users.platform_id` для `platform='max'` мы храним `user_id`;
 - в `special.settings.chat_id` тоже хранится `chat_id`;
 - payload из RabbitMQ должен отправляться в `chat_id`, а не в `user_id`.
 
@@ -180,7 +182,7 @@ python main.py
 
 - Если MAX-пользователь «не авторизован», сначала проверь:
   - есть ли запись в `special.users` с `platform='max'`;
-  - совпадает ли `platform_id` с `chat_id` диалога MAX;
+  - совпадает ли `platform_id` с `user_id` пользователя MAX;
   - есть ли `special.user_account`;
   - есть ли `special.settings`.
 - Если из RabbitMQ ничего не приходит в чат, почти всегда проблема одна из двух:

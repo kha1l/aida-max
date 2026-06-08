@@ -41,12 +41,12 @@ class I18nMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
         chat_id = getattr(event_chat, "id", None)
         try:
             chat_language = await get_chat_language(session, chat_id) if chat_id is not None else None
-            settings = await get_user_settings(session, tg_user)
+            settings = await get_user_settings(session, tg_user, chat_id)
 
             if chat_language:
                 language = chat_language
             else:
-                language = await get_default_user_language(session, tg_user)
+                language = await get_default_user_language(session, tg_user, chat_id)
         except SQLAlchemyError as exc:
             logger.warning(
                 "Не удалось загрузить язык чата из БД, используем ru по умолчанию",

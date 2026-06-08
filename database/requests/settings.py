@@ -17,9 +17,13 @@ class PlatformUser:
     id: int
 
 
-async def get_user_settings(session: AsyncSession, tg_user: PlatformUser) -> list[dict[str, Any]] | None:
+async def get_user_settings(
+    session: AsyncSession,
+    tg_user: PlatformUser,
+    chat_id: int | None = None,
+) -> list[dict[str, Any]] | None:
     """Возвращает настройки пользователя (включая язык по chat_id)."""
-    user_id = await get_user_id(session, tg_user)
+    user_id = await get_user_id(session, tg_user, chat_id)
     if not user_id:
         return None
 
@@ -56,7 +60,7 @@ async def set_chat_language_for_user(
     country: str,
 ) -> None:
     """Сохраняет язык для конкретного чата, создавая запись при первом выборе."""
-    user_id = await get_user_id(session, tg_user)
+    user_id = await get_user_id(session, tg_user, chat_id)
     if not user_id:
         return
 
@@ -93,9 +97,13 @@ async def get_chat_language(session: AsyncSession, chat_id: int) -> str | None:
     return result.scalar_one_or_none()
 
 
-async def get_default_user_language(session: AsyncSession, tg_user: PlatformUser) -> str:
+async def get_default_user_language(
+    session: AsyncSession,
+    tg_user: PlatformUser,
+    chat_id: int | None = None,
+) -> str:
     """Определяет персональный язык пользователя по его доступам, если чат еще не настроен."""
-    user_id = await get_user_id(session, tg_user)
+    user_id = await get_user_id(session, tg_user, chat_id)
     if not user_id:
         return "ru"
 

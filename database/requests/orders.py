@@ -85,3 +85,12 @@ async def delete_order(
         account_id=account_id,
         topic_id=topic_id,
     )
+
+
+async def delete_orders_for_chat(session: AsyncSession, chat_id: int) -> int:
+    """Удаляет все подписки недоступного MAX-диалога."""
+    result = await session.execute(delete(Orders).where(Orders.chat_id == chat_id))
+    await session.commit()
+    deleted = result.rowcount or 0
+    logger.info("orders delete for unavailable chat", chat_id=chat_id, deleted=deleted)
+    return deleted

@@ -97,7 +97,9 @@ Payload ожидается в формате:
 Важно:
 - `topic_id` в MAX сейчас игнорируется;
 - для action-клавиатур нужен `unit_uuid`;
+- для сетевых отчетов без action-кнопок (`revenue`, `tracking`, `metrics`, `stock`) `unit_uuid` не нужен;
 - если отправить в `user_id` вместо `chat_id`, MAX вернет ошибку `dialog.not.found`.
+- RabbitMQ delivery обрабатывает недоступные MAX-диалоги без traceback и удаляет их подписки из `aida.orders`.
 
 ## Manual reports и Dagster
 

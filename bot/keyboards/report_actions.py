@@ -24,7 +24,12 @@ HIDE_ONLY_POSTS = {
     "later_rest",
     "assembly_rest",
     "drink_rest",
+    "tracking",
+    "metrics",
+    "revenue",
+    "stock",
 }
+POSTS_REQUIRING_UNIT_UUID = {"couriers", "stationary"}
 WAITING_THRESHOLD_VALUES_MINUTES = (1, 2, 3, 5, 10)
 DRINK_THRESHOLD_VALUES_MINUTES = (1, 2, 3, 4, 5)
 COURIERS_REPORT_BUTTONS = (

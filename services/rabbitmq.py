@@ -11,11 +11,13 @@ import aio_pika
 from loguru import logger
 from maxo import Bot
 from maxo.enums import TextFormat
+from maxo.errors import MaxBotBadRequestError, MaxBotForbiddenError, MaxBotNotFoundError
 from maxo.types.inline_keyboard_attachment import InlineKeyboardAttachment
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from bot.keyboards.report_actions import build_report_keyboard
+from bot.keyboards.report_actions import POSTS_REQUIRING_UNIT_UUID, build_report_keyboard
+from database.requests.orders import delete_orders_for_chat
 from database.requests.settings import get_chat_language, get_default_chat_language
 from services.i18n import get_translator
 
@@ -74,6 +76,42 @@ def _build_keyboard_attachments(post: str | None, unit_uuid: str | None, transla
     return [InlineKeyboardAttachment.factory(buttons=keyboard)]
 
 
+def _is_unavailable_max_dialog_error(
+    exc: MaxBotBadRequestError | MaxBotForbiddenError | MaxBotNotFoundError,
+) -> bool:
+    """Проверяет, что MAX delivery error означает постоянную недоступность диалога."""
+    text = f"{exc.code} {exc.error} {exc.message}".lower()
+    expected_fragments = (
+        "chat.denied",
+        "dialog.suspended",
+        "dialog.not.found",
+        "chat not found",
+        "dialog not found",
+    )
+    return any(fragment in text for fragment in expected_fragments)
+
+
+async def _delete_delivery_subscriptions(
+    session_maker: async_sessionmaker[AsyncSession] | None,
+    *,
+    payload: RabbitPayload,
+) -> int:
+    if session_maker is None:
+        return 0
+    try:
+        async with session_maker() as session:
+            return await delete_orders_for_chat(session, payload.chat_id)
+    except SQLAlchemyError as exc:
+        logger.bind(
+            chat_id=payload.chat_id,
+            topic_id=payload.topic_id,
+            post=payload.post,
+            unit_uuid=payload.unit_uuid,
+            error=str(exc),
+        ).warning("Delivery cleanup skipped: failed to delete subscriptions")
+        return 0
+
+
 async def rabbit_listener(
     bot: Bot,
     rabbit_url: str,
@@ -94,7 +132,7 @@ async def rabbit_listener(
                 translate = await _resolve_chat_translator(session_maker, payload.chat_id)
                 attachments = _build_keyboard_attachments(payload.post, payload.unit_uuid, translate)
 
-                if payload.post and not payload.unit_uuid:
+                if payload.post in POSTS_REQUIRING_UNIT_UUID and not payload.unit_uuid:
                     logger.bind(
                         chat_id=payload.chat_id,
                         topic_id=payload.topic_id,
@@ -108,7 +146,7 @@ async def rabbit_listener(
                         topic_id=payload.topic_id,
                         queue=queue_name,
                         post=payload.post,
-                    ).warning("topic_id is ignored in aida_max/MAX delivery")
+                    ).info("topic_id is ignored in aida_max/MAX delivery")
 
                 await bot.send_message(
                     chat_id=payload.chat_id,
@@ -124,6 +162,30 @@ async def rabbit_listener(
                     post=payload.post,
                     unit_uuid=payload.unit_uuid,
                 ).info("Message delivered")
+
+            except (MaxBotBadRequestError, MaxBotForbiddenError, MaxBotNotFoundError) as exc:
+                if payload is not None and _is_unavailable_max_dialog_error(exc):
+                    deleted = await _delete_delivery_subscriptions(
+                        session_maker,
+                        payload=payload,
+                    )
+                    logger.bind(
+                        chat_id=payload.chat_id,
+                        topic_id=payload.topic_id,
+                        queue=queue_name,
+                        post=payload.post,
+                        unit_uuid=payload.unit_uuid,
+                        deleted=deleted,
+                        reason=exc.__class__.__name__,
+                    ).info("MAX dialog unavailable; subscriptions removed")
+                else:
+                    logger.bind(
+                        chat_id=payload.chat_id if payload else None,
+                        topic_id=payload.topic_id if payload else None,
+                        queue=queue_name,
+                        post=payload.post if payload else None,
+                        unit_uuid=payload.unit_uuid if payload else None,
+                    ).exception("Failed to send message from RabbitMQ")
 
             except Exception:
                 logger.bind(

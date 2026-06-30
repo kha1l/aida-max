@@ -20,6 +20,8 @@ from sqlalchemy.orm import (
     relationship,
 )
 
+from database.encrypted_fields import EncryptedAccountName
+
 
 class Base(DeclarativeBase):
     """Базовый класс для всех SQLAlchemy-моделей."""
@@ -100,7 +102,7 @@ class Account(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sub: Mapped[Optional[str]] = mapped_column(String(100))
-    name: Mapped[Optional[str]] = mapped_column(String(100))
+    name: Mapped[Optional[str]] = mapped_column(EncryptedAccountName())
     properties: Mapped[Optional[str]] = mapped_column(String(100))
     active: Mapped[Optional[bool]] = mapped_column(Boolean)
     email: Mapped[Optional[str]] = mapped_column(String(150))

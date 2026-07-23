@@ -151,7 +151,15 @@ RABBIT_QUEUE=aida-max
 
 MAX_BIND_URL=https://dodovkus.ru/aida/max/bind/
 MAX_BIND_REQUEST_TIMEOUT_SECONDS=15
+
+APP_VERSION=development
+SECURITY_PSEUDONYM_KEY=
+SECURITY_PSEUDONYM_KEY_VERSION=v1
 ```
+
+`SECURITY_PSEUDONYM_KEY` должен быть отдельным случайным ключом окружения.
+Если ключ не задан, персональные идентификаторы не попадают в логи, но
+псевдонимы для их сопоставления также не формируются.
 
 ## Запуск локально
 

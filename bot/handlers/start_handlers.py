@@ -17,6 +17,7 @@ from config import Config
 from bot.keyboards.info import new_account
 from bot.keyboards.menu import main_menu_keyboard
 from database.requests.users import get_user_context
+from security_logging import SERVICE_NAME, emit_security_event
 from services.i18n import tr
 from services.max_auth import MaxBindError, bind_max_account
 
@@ -65,6 +66,15 @@ async def deeplink_start_(
     current_chat_id = int(bot_started.chat_id)
 
     if session is None or config is None:
+        emit_security_event(
+            "auth_failed",
+            service=SERVICE_NAME,
+            source="max",
+            actor=_resolve_user_id(max_user),
+            object_name="account_binding",
+            result="failure",
+            reason_code="runtime_context_missing",
+        )
         await facade.send_message(
             "Не удалось завершить авторизацию MAX. Пожалуйста, попробуйте еще раз.",
         )
@@ -86,15 +96,51 @@ async def deeplink_start_(
             timeout_seconds=config.max_auth.request_timeout_seconds,
         )
         user_ctx = await get_user_context(session, max_user, current_chat_id)
-        logger.info(
-            "MAX user successfully bound to account from deeplink",
-            platform_id=current_chat_id,
-            max_id=_resolve_user_id(max_user),
-            account_id=account_id,
-            account_name=account_name,
-            user_id=user_ctx.get("user_id") if user_ctx else None,
-        )
+        if user_ctx:
+            emit_security_event(
+                "auth_succeeded",
+                service=SERVICE_NAME,
+                source="max",
+                actor=_resolve_user_id(max_user),
+                object_name="account_binding",
+                result="success",
+                reason_code="deeplink_binding_succeeded",
+            )
+            logger.info(
+                "MAX user successfully bound to account from deeplink",
+                platform_id=current_chat_id,
+                max_id=_resolve_user_id(max_user),
+                account_id=account_id,
+                account_name=account_name,
+                user_id=user_ctx.get("user_id"),
+            )
+        else:
+            emit_security_event(
+                "auth_failed",
+                service=SERVICE_NAME,
+                source="max",
+                actor=_resolve_user_id(max_user),
+                object_name="account_binding",
+                result="failure",
+                reason_code="user_context_unavailable",
+            )
+            logger.warning(
+                "MAX account binding completed without user context",
+                platform_id=current_chat_id,
+                max_id=_resolve_user_id(max_user),
+                account_id=account_id,
+                account_name=account_name,
+            )
     except MaxBindError as exc:
+        emit_security_event(
+            "auth_failed",
+            service=SERVICE_NAME,
+            source="max",
+            actor=_resolve_user_id(max_user),
+            object_name="account_binding",
+            result="failure",
+            reason_code="deeplink_binding_failed",
+        )
         logger.warning(
             "Failed to bind MAX user to account from deeplink",
             platform_id=current_chat_id,

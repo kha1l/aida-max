@@ -24,7 +24,7 @@ from services.cache import RedisCache
 from services.rabbitmq import rabbit_listener
 
 
-setup_logging("aida_max")
+setup_logging()
 
 
 async def _sync_bot_commands(bot: Bot) -> None:

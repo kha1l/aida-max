@@ -19,3 +19,6 @@ logs/
 .idea/
 .vscode/
 *.iml
+# Local security scanner output
+/aitriage-reports/
+/security-reports/

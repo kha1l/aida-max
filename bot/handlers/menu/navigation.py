@@ -6,8 +6,8 @@ from typing import Callable
 
 from maxo import Router
 from maxo.enums import TextFormat
-from maxo.routing.updates import MessageCallback
-from maxo.utils.facades import MessageCallbackFacade
+from maxo.routing.facades import MessageCallbackFacade
+from maxo.types import MessageCallback
 
 from bot.callback.menu import LanguagePayload, MainMenuPayload, SectionPayload, SettingsPayload
 from bot.dialogs.texts import MenuTexts

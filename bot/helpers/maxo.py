@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from maxo.routing.updates import MessageCallback, MessageCreated
+from maxo.types import MessageCallback, MessageCreated
 
 
 def resolve_message_chat_id(message: MessageCreated) -> int | None:

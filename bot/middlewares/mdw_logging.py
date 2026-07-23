@@ -8,9 +8,7 @@ from loguru import logger
 from maxo.routing.ctx import Ctx
 from maxo.routing.interfaces.middleware import BaseMiddleware, NextMiddleware
 from maxo.routing.signals.update import MaxoUpdate
-from maxo.routing.updates.bot_started import BotStarted
-from maxo.routing.updates.message_callback import MessageCallback
-from maxo.routing.updates.message_created import MessageCreated
+from maxo.types import BotStarted, MessageCallback, MessageCreated
 from security_logging import pseudonymize
 
 

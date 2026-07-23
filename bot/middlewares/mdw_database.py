@@ -8,7 +8,7 @@ from loguru import logger
 from maxo.routing.ctx import Ctx
 from maxo.routing.interfaces.middleware import BaseMiddleware, NextMiddleware
 from maxo.routing.signals.update import MaxoUpdate
-from maxo.routing.updates import BotStarted, MessageCallback, MessageCreated
+from maxo.types import BotStarted, MessageCallback, MessageCreated
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.helpers.maxo import resolve_callback_chat_id, resolve_message_chat_id

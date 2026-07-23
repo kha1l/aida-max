@@ -8,8 +8,8 @@ from urllib.parse import unquote
 from loguru import logger
 from maxo import Router
 from maxo.routing.filters import CommandStart, DeeplinkFilter
-from maxo.routing.updates import BotStarted, MessageCreated
-from maxo.utils.facades import BotStartedFacade, MessageCreatedFacade
+from maxo.routing.facades import BotStartedFacade, MessageCreatedFacade
+from maxo.types import BotStarted, MessageCreated
 
 from bot.helpers.maxo import resolve_user_display_name
 from bot.dialogs.texts import MenuTexts

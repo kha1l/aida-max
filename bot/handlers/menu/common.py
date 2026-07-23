@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 from typing import Callable
 
-from maxo.routing.updates import MessageCallback
+from maxo.types import MessageCallback
 
 from bot.dialogs.data import POST
 from bot.dialogs.texts import MenuTexts

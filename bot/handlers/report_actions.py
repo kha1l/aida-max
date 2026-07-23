@@ -7,8 +7,8 @@ from typing import Any, Callable
 
 from loguru import logger
 from maxo import Router
-from maxo.routing.updates import MessageCallback
-from maxo.utils.facades import MessageCallbackFacade
+from maxo.routing.facades import MessageCallbackFacade
+from maxo.types import MessageCallback
 
 from bot.helpers.maxo import resolve_callback_chat_id
 from bot.callback.report_actions import (

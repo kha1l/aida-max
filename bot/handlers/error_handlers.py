@@ -6,8 +6,8 @@ from typing import Callable
 
 from loguru import logger
 from maxo import Router
-from maxo.routing.updates import ErrorEvent, MessageCallback, MessageCreated
-from maxo.utils.facades import ErrorEventFacade
+from maxo.routing.facades import ErrorEventFacade
+from maxo.types import ErrorEvent, MessageCallback, MessageCreated
 
 from bot.dialogs.texts import MenuTexts
 from bot.helpers.maxo import resolve_message_chat_id

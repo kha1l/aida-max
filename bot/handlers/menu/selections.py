@@ -7,8 +7,8 @@ from typing import Callable
 from loguru import logger
 from maxo import Router
 from maxo.enums import TextFormat
-from maxo.routing.updates import MessageCallback
-from maxo.utils.facades import MessageCallbackFacade
+from maxo.routing.facades import MessageCallbackFacade
+from maxo.types import MessageCallback
 
 from bot.callback.live_data import LiveUnitsActionPayload, LiveUnitTogglePayload
 from bot.callback.report_selection import ReportUnitsActionPayload, ReportUnitTogglePayload

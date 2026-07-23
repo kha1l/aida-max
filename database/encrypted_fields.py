@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import os
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -13,12 +12,14 @@ AES_GCM_PREFIX = 'v2:'
 AES_GCM_NONCE_SIZE = 12
 
 
-def _get_secret_key() -> str | None:
-    Env().read_env()
+def _get_secret_key(path: str | None = None) -> str | None:
+    env = Env()
+    env.read_env(path)
     return (
-        os.getenv('SECRET_KEY_AUTH')
-        or os.getenv('TOKEN_AUTH_SECRET_KEY')
-        or os.getenv('DODO_TOKEN_AUTH_SECRET_KEY')
+        env.str('SECRET_KEY_AUTH', '')
+        or env.str('TOKEN_AUTH_SECRET_KEY', '')
+        or env.str('DODO_TOKEN_AUTH_SECRET_KEY', '')
+        or None
     )
 
 

@@ -2,6 +2,8 @@ import json
 import os
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -168,6 +170,43 @@ class SecurityLoggingTests(unittest.TestCase):
         self.assertEqual(event["record"]["file"]["name"], "synthetic.py")
         self.assertNotIn("callback_data", event)
         self.assertNotIn("file", event)
+
+
+class EncryptedFieldsConfigTests(unittest.TestCase):
+    def test_secret_key_is_loaded_from_dotenv_without_mutating_os_environ(self) -> None:
+        from database.encrypted_fields import _get_secret_key
+
+        with TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text(
+                "SECRET_KEY_AUTH=synthetic-dotenv-key\n",
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(
+                    _get_secret_key(str(env_path)),
+                    "synthetic-dotenv-key",
+                )
+                self.assertNotIn("SECRET_KEY_AUTH", os.environ)
+
+    def test_exported_secret_key_takes_precedence_over_dotenv(self) -> None:
+        from database.encrypted_fields import _get_secret_key
+
+        with TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text(
+                "SECRET_KEY_AUTH=synthetic-dotenv-key\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ,
+                {"SECRET_KEY_AUTH": "synthetic-exported-key"},
+                clear=True,
+            ):
+                self.assertEqual(
+                    _get_secret_key(str(env_path)),
+                    "synthetic-exported-key",
+                )
 
 
 class AuthAuditTests(unittest.IsolatedAsyncioTestCase):

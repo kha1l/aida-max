@@ -11,6 +11,7 @@ from maxo.routing.signals.update import MaxoUpdate
 from maxo.routing.updates.bot_started import BotStarted
 from maxo.routing.updates.message_callback import MessageCallback
 from maxo.routing.updates.message_created import MessageCreated
+from security_logging import emit_security_event, pseudonymize
 
 
 def _is_start_message(update: MaxoUpdate[Any]) -> bool:
@@ -36,33 +37,44 @@ class LoggingMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
         try:
             if isinstance(inner, MessageCreated):
                 if _is_start_message(update):
+                    user_id = getattr(update_context, "user_id", None)
+                    update_id = getattr(inner, "update_id", None)
+                    emit_security_event(
+                        "auth_succeeded",
+                        service="aida-max",
+                        source="max",
+                        actor=user_id,
+                        object_name="polling_update",
+                        result="success",
+                        reason_code="platform_update_verified",
+                        request_id=str(update_id) if update_id is not None else None,
+                        trace_id=str(update_id) if update_id is not None else None,
+                    )
                     log = log.bind(
                         update_type="message_created",
-                        chat_id=getattr(update_context, "chat_id", None),
-                        user_id=getattr(update_context, "user_id", None),
+                        chat_hash=pseudonymize(getattr(update_context, "chat_id", None)),
+                        user_hash=pseudonymize(getattr(update_context, "user_id", None)),
                     )
-                    log.info("message", text=inner.text)
+                    log.info("message received")
             elif isinstance(inner, BotStarted):
                 log = log.bind(
                     update_type="bot_started",
-                    chat_id=getattr(update_context, "chat_id", None),
-                    user_id=getattr(update_context, "user_id", None),
-                    payload=inner.payload,
+                    chat_hash=pseudonymize(getattr(update_context, "chat_id", None)),
+                    user_hash=pseudonymize(getattr(update_context, "user_id", None)),
                 )
                 log.info("bot started")
             elif isinstance(inner, MessageCallback):
                 log = log.bind(
                     update_type="message_callback",
-                    chat_id=getattr(update_context, "chat_id", None),
-                    user_id=getattr(update_context, "user_id", None),
-                    callback_data=inner.callback.payload,
+                    chat_hash=pseudonymize(getattr(update_context, "chat_id", None)),
+                    user_hash=pseudonymize(getattr(update_context, "user_id", None)),
                 )
                 log.info("callback")
             else:
                 log = log.bind(
                     update_type=inner.__class__.__name__,
-                    chat_id=getattr(update_context, "chat_id", None),
-                    user_id=getattr(update_context, "user_id", None),
+                    chat_hash=pseudonymize(getattr(update_context, "chat_id", None)),
+                    user_hash=pseudonymize(getattr(update_context, "user_id", None)),
                 )
                 log.info("update")
 

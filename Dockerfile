@@ -23,6 +23,9 @@ PY
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+ARG APP_VERSION=development
+ENV APP_VERSION=${APP_VERSION}
+
 COPY --chown=appuser:appuser . .
 
 USER appuser

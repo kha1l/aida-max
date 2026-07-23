@@ -47,6 +47,7 @@ jobs:
           set -euo pipefail
           mkdir -p security-reports "${RUNNER_TEMP}/trivy-cache"
           docker build \
+            --build-arg "APP_VERSION=${GITHUB_SHA}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
             --tag "${IMAGE_REF}" \
             .
@@ -60,8 +61,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm "${IMAGE_REF}" \
-            python -m unittest test_security_logging \
+          docker run --rm \
+            --env PYTHONPATH=/app \
+            --volume "${GITHUB_WORKSPACE}/test_security_logging.py:/tmp/test_security_logging.py:ro" \
+            "${IMAGE_REF}" \
+            python /tmp/test_security_logging.py \
             |& tee security-reports/container-tests.txt
 
       - name: Scan exact built image

@@ -1,9 +1,9 @@
 from loguru import logger
-from security_logging import loguru_json_sink, redact_record
+from security_logging import SERVICE_NAME, loguru_json_sink, redact_record
 
 
 def setup_logging(
-    service_name: str = "aida",
+    service_name: str = SERVICE_NAME,
     log_level: str = "INFO",
 ):
     """Настраивает структурированный вывод логов в stdout."""

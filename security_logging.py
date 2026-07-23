@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+SERVICE_NAME = "aida-max"
 _ALLOWED_EXTRA_FIELDS = frozenset({
     "service",
     "service_version",
@@ -55,16 +56,40 @@ _PHONE = re.compile(
     r"(?:\+7|8)[ \t()\-]*[0-9]{3}[ \t()\-]*"
     r"[0-9]{3}[ \t\-]*[0-9]{2}[ \t\-]*[0-9]{2}"
 )
-_LONG_IDENTIFIER = re.compile(r"(?<!\d)-?\d{6,}(?!\d)")
+_LONG_IDENTIFIER = re.compile(r"(?<![A-Za-z0-9])-?\d{6,}(?![A-Za-z0-9])")
 _AUTHORIZATION = re.compile(
     r"(?i)\b(authorization|proxy-authorization)\b\s*[:=]\s*"
     r"(?:bearer\s+)?[^\s,;]+"
+)
+_QUOTED_CREDENTIAL = re.compile(
+    r"""(?ix)
+    (?P<prefix>
+        ["']?
+        (?:authorization|proxy-authorization|cookie|set-cookie|
+           access_token|refresh_token|id_token|api_key|token|secret|password)
+        ["']?
+        \s*[:=]\s*
+    )
+    (?P<value>
+        "(?:\\.|[^"\\])*"
+        |
+        '(?:\\.|[^'\\])*'
+        |
+        (?:bearer\s+)?[^\s,;}]+
+    )
+    """
 )
 _CREDENTIAL = re.compile(
     r"(?i)\b(authorization|proxy-authorization|cookie|set-cookie|"
     r"access_token|refresh_token|id_token|api_key|token|secret|password)"
     r"\b\s*[:=]\s*[^\s,;]+"
 )
+
+
+def _redact_quoted_credential(match: re.Match[str]) -> str:
+    raw_value = match.group("value")
+    quote = raw_value[0] if raw_value.startswith(("'", '"')) else ""
+    return f"{match.group('prefix')}{quote}[REDACTED]{quote}"
 
 
 def pseudonymize(value: Any) -> str | None:
@@ -83,6 +108,7 @@ def pseudonymize(value: Any) -> str | None:
 
 def redact_text(value: Any) -> str:
     text = str(value or "").replace("\r", " ").replace("\n", " ")
+    text = _QUOTED_CREDENTIAL.sub(_redact_quoted_credential, text)
     text = _AUTHORIZATION.sub(
         lambda match: f"{match.group(1)}=[REDACTED]",
         text,
@@ -111,6 +137,27 @@ def redact_record(record: dict[str, Any]) -> None:
     record["extra"].update(safe)
 
 
+def _compatibility_record(
+    *,
+    level: str,
+    message: str,
+    module: str = "",
+    function: str = "",
+    line: int | None = None,
+    file_name: str = "",
+) -> dict[str, Any]:
+    """Возвращает минимальный безопасный блок для текущих Grafana/Loki-запросов."""
+
+    return {
+        "level": {"name": level.upper()},
+        "message": message,
+        "module": redact_text(module),
+        "function": redact_text(function),
+        "line": line,
+        "file": {"name": redact_text(file_name)},
+    }
+
+
 def build_application_log(record: dict[str, Any]) -> dict[str, Any]:
     extra = record.get("extra", {})
     timestamp = record.get("time")
@@ -121,14 +168,24 @@ def build_application_log(record: dict[str, Any]) -> dict[str, Any]:
 
     level_object = record.get("level")
     level_value = getattr(level_object, "name", str(level_object or "INFO"))
+    message = redact_text(record.get("message"))
+    file_object = record.get("file")
     event: dict[str, Any] = {
         "timestamp": timestamp_value,
         "stream": "application",
         "level": level_value.lower(),
-        "message": redact_text(record.get("message")),
+        "message": message,
         "service": extra.get("service", "unknown"),
         "version": extra.get("service_version")
         or os.getenv("APP_VERSION", "development"),
+        "record": _compatibility_record(
+            level=level_value,
+            message=message,
+            module=str(record.get("module") or ""),
+            function=str(record.get("function") or ""),
+            line=record.get("line"),
+            file_name=str(getattr(file_object, "name", "") or ""),
+        ),
     }
     for field in (
         "component",
@@ -183,9 +240,12 @@ def build_security_event(
         raise ValueError(f"Unsupported security event type: {event_type}")
     if result not in {"success", "failure", "denied"}:
         raise ValueError(f"Unsupported security event result: {result}")
+    message = event_type
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "stream": "security_audit",
+        "level": "info",
+        "message": message,
         "event_type": event_type,
         "source": redact_text(source),
         "request_id": redact_text(request_id) if request_id else None,
@@ -197,6 +257,13 @@ def build_security_event(
         "service": service,
         "version": os.getenv("APP_VERSION", "development"),
         "key_version": os.getenv("SECURITY_PSEUDONYM_KEY_VERSION", "v1"),
+        "record": _compatibility_record(
+            level="INFO",
+            message=message,
+            module="security_logging",
+            function="emit_security_event",
+            file_name="security_logging.py",
+        ),
     }
 
 

@@ -14,3 +14,16 @@ build/
 *.egg-info
 .idea/
 .vscode/
+.git
+.github/
+.gitignore
+.aitriage.yaml
+.dockerignore
+Dockerfile
+SECURITY.md
+README.md
+.env*
+aitriage-reports/
+security-reports/
+test*.py
+tests/

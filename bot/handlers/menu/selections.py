@@ -16,6 +16,7 @@ from bot.keyboards.live_data import build_live_units_keyboard
 from bot.keyboards.menu import live_data_menu_keyboard, main_menu_keyboard
 from bot.keyboards.report_selection import build_report_units_keyboard
 from database.requests.orders import delete_order, get_orders_by_post, upsert_order
+from security_logging import pseudonymize
 from services.i18n import tr
 
 from .common import (
@@ -281,16 +282,21 @@ async def on_live_units_action(
                 },
             )
         except DagsterLaunchError as exc:
-            logger.warning("Failed to launch live-data job", action=payload.operation, error=str(exc))
+            logger.warning(
+                "Failed to launch live-data job",
+                chat_hash=pseudonymize(op_config["chat_id"]),
+                object=f"operation:{payload.operation}",
+                error_type=type(exc).__name__,
+            )
             await facade.callback_answer(notification=tr(_, config_entry["error_popup"]))
             return
 
         logger.info(
             "Live-data job launched",
-            action=payload.operation,
-            run_id=run.run_id,
-            chat_id=op_config["chat_id"],
-            unit_count=len(selected),
+            chat_hash=pseudonymize(op_config["chat_id"]),
+            object=f"operation:{payload.operation}",
+            request_id=run.run_id,
+            status=len(selected),
         )
         await state.update_data(live_operation=None, live_selected=[])
         await facade.edit_message(

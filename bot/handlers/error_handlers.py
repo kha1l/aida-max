@@ -23,7 +23,10 @@ async def on_error(
     _: Callable[[str], str] = lambda s: s,
 ) -> None:
     """Логирует неожиданные ошибки и мягко сообщает о них пользователю."""
-    logger.exception("Unhandled exception in maxo handler", error=repr(error.error))
+    logger.exception(
+        "Unhandled exception in maxo handler",
+        error_type=type(error.error).__name__,
+    )
 
     event = error.event
     message = tr(_, MenuTexts.GENERIC_ERROR)

@@ -171,6 +171,43 @@ class SecurityLoggingTests(unittest.TestCase):
         self.assertNotIn("callback_data", event)
         self.assertNotIn("file", event)
 
+    def test_delivery_log_hashes_chat_and_drops_report_body(self) -> None:
+        raw_chat_id = "987654321"
+        report_body = "Synthetic Employee was late"
+        callback_data = "synthetic:callback:payload"
+        record = {
+            "time": datetime.now(timezone.utc),
+            "level": SimpleNamespace(name="INFO"),
+            "message": "Message delivered",
+            "extra": {
+                "service": "aida-max",
+                "chat_id": raw_chat_id,
+                "text": report_body,
+                "callback_data": callback_data,
+            },
+            "exception": None,
+            "module": "services.rabbitmq",
+            "function": "on_message",
+            "line": 1,
+            "file": SimpleNamespace(name="rabbitmq.py"),
+        }
+        with patch.dict(
+            os.environ,
+            {
+                "SECURITY_PSEUDONYM_KEY": "synthetic-test-key",
+                "SECURITY_PSEUDONYM_KEY_VERSION": "test-v1",
+            },
+            clear=False,
+        ):
+            redact_record(record)
+            event = build_application_log(record)
+
+        serialized = json.dumps(event, ensure_ascii=False)
+        self.assertRegex(event["chat_hash"], r"^test-v1:[0-9a-f]{64}$")
+        self.assertNotIn(raw_chat_id, serialized)
+        self.assertNotIn(report_body, serialized)
+        self.assertNotIn(callback_data, serialized)
+
 
 class EncryptedFieldsConfigTests(unittest.TestCase):
     def test_secret_key_is_loaded_from_dotenv_without_mutating_os_environ(self) -> None:

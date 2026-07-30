@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.helpers.maxo import resolve_callback_chat_id, resolve_message_chat_id
 from database.requests.users import get_user_context
+from security_logging import pseudonymize
 
 
 class DBSessionMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
@@ -77,17 +78,14 @@ class UserContextMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
         if user_ctx is None:
             logger.warning(
                 "Пользователь не найден в базе данных",
-                platform_id=current_chat_id,
-                max_id=getattr(tg_user, "id", None),
-                user_id=getattr(tg_user, "id", None),
-                chat_id=current_chat_id,
+                chat_hash=pseudonymize(current_chat_id),
+                user_hash=pseudonymize(getattr(tg_user, "id", None)),
             )
         else:
             logger.success(
                 "Пользователь успешно загружен из базы данных",
-                platform_id=current_chat_id,
-                max_id=getattr(tg_user, "id", None),
-                user_id=user_ctx.get("user_id"),
+                chat_hash=pseudonymize(current_chat_id),
+                user_hash=pseudonymize(getattr(tg_user, "id", None)),
             )
 
         ctx["user_ctx"] = user_ctx

@@ -16,6 +16,7 @@ from database.requests.settings import (
     get_default_user_language,
     get_user_settings,
 )
+from security_logging import pseudonymize
 from services.i18n import get_translator
 
 
@@ -50,9 +51,9 @@ class I18nMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
         except SQLAlchemyError as exc:
             logger.warning(
                 "Не удалось загрузить язык чата из БД, используем ru по умолчанию",
-                chat_id=chat_id,
-                platform_id=getattr(tg_user, 'id', None),
-                error=str(exc),
+                chat_hash=pseudonymize(chat_id),
+                user_hash=pseudonymize(getattr(tg_user, "id", None)),
+                error_type=type(exc).__name__,
             )
             language = "ru"
             settings = None

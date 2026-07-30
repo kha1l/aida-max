@@ -23,6 +23,7 @@ from bot.keyboards.report_actions import (
     build_waiting_threshold_keyboard,
 )
 from config import Config, load_config
+from security_logging import pseudonymize
 from services.dagster import DagsterClient, DagsterLaunchError
 from services.i18n import tr
 
@@ -130,21 +131,23 @@ async def _launch_manual_report(
             tags=tags,
         )
     except DagsterLaunchError as exc:
-        logger.bind(unit_uuid=unit_uuid, account_id=account_id, chat_id=op_config["chat_id"], user_id=callback.user.id).warning(
+        logger.bind(
+            chat_hash=pseudonymize(op_config["chat_id"]),
+            user_hash=pseudonymize(callback.user.id),
+            object=f"report:{report_config.log_label.lower()}",
+            error_type=type(exc).__name__,
+        ).warning(
             f"Failed to launch {report_config.log_label.lower()} job",
-            error=str(exc),
         )
         await facade.callback_answer(notification=tr(translate, report_config.launch_error_popup))
         return
 
     logger.bind(
-        unit_uuid=unit_uuid,
-        unit_name=unit.get("name"),
-        account_id=account_id,
-        chat_id=op_config["chat_id"],
-        user_id=callback.user.id,
-        run_id=run.run_id,
-        run_status=run.status,
+        chat_hash=pseudonymize(op_config["chat_id"]),
+        user_hash=pseudonymize(callback.user.id),
+        object=f"report:{report_config.log_label.lower()}",
+        request_id=run.run_id,
+        status=run.status,
     ).info(f"{report_config.log_label} job launched")
     await facade.callback_answer(notification=tr(translate, report_config.success_popup))
 

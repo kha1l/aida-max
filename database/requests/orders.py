@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Orders
 from loguru import logger
+from security_logging import pseudonymize
 
 
 async def get_orders_by_post(
@@ -57,12 +58,8 @@ async def upsert_order(
     await session.commit()
     logger.info(
         "orders upsert",
-        post=post,
-        chat_id=chat_id,
-        account_id=account_id,
-        topic_id=topic_id,
-        uuids=uuids,
-        params=params,
+        chat_hash=pseudonymize(chat_id),
+        object=f"subscription:{post}",
     )
 
 
@@ -80,10 +77,8 @@ async def delete_order(
     await session.commit()
     logger.info(
         "orders delete",
-        post=post,
-        chat_id=chat_id,
-        account_id=account_id,
-        topic_id=topic_id,
+        chat_hash=pseudonymize(chat_id),
+        object=f"subscription:{post}",
     )
 
 
@@ -92,5 +87,9 @@ async def delete_orders_for_chat(session: AsyncSession, chat_id: int) -> int:
     result = await session.execute(delete(Orders).where(Orders.chat_id == chat_id))
     await session.commit()
     deleted = result.rowcount or 0
-    logger.info("orders delete for unavailable chat", chat_id=chat_id, deleted=deleted)
+    logger.info(
+        "orders delete for unavailable chat",
+        chat_hash=pseudonymize(chat_id),
+        status=deleted,
+    )
     return deleted

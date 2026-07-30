@@ -17,7 +17,7 @@ from config import Config
 from bot.keyboards.info import new_account
 from bot.keyboards.menu import main_menu_keyboard
 from database.requests.users import get_user_context
-from security_logging import SERVICE_NAME, emit_security_event
+from security_logging import SERVICE_NAME, emit_security_event, pseudonymize
 from services.i18n import tr
 from services.max_auth import MaxBindError, bind_max_account
 
@@ -108,11 +108,9 @@ async def deeplink_start_(
             )
             logger.info(
                 "MAX user successfully bound to account from deeplink",
-                platform_id=current_chat_id,
-                max_id=_resolve_user_id(max_user),
-                account_id=account_id,
-                account_name=account_name,
-                user_id=user_ctx.get("user_id"),
+                chat_hash=pseudonymize(current_chat_id),
+                user_hash=pseudonymize(_resolve_user_id(max_user)),
+                object="account_binding",
             )
         else:
             emit_security_event(
@@ -126,10 +124,9 @@ async def deeplink_start_(
             )
             logger.warning(
                 "MAX account binding completed without user context",
-                platform_id=current_chat_id,
-                max_id=_resolve_user_id(max_user),
-                account_id=account_id,
-                account_name=account_name,
+                chat_hash=pseudonymize(current_chat_id),
+                user_hash=pseudonymize(_resolve_user_id(max_user)),
+                object="account_binding",
             )
     except MaxBindError as exc:
         emit_security_event(
@@ -143,11 +140,10 @@ async def deeplink_start_(
         )
         logger.warning(
             "Failed to bind MAX user to account from deeplink",
-            platform_id=current_chat_id,
-            max_id=_resolve_user_id(max_user),
-            account_id=account_id,
-            account_name=account_name,
-            error=str(exc),
+            chat_hash=pseudonymize(current_chat_id),
+            user_hash=pseudonymize(_resolve_user_id(max_user)),
+            object="account_binding",
+            error_type=type(exc).__name__,
         )
         await facade.send_message(
             "Не удалось завершить авторизацию MAX. Пожалуйста, начните авторизацию заново из marketplace.",

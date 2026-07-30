@@ -39,7 +39,10 @@ async def _sync_bot_commands(bot: Bot) -> None:
             ]
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Failed to sync MAX bot commands", error=str(exc))
+        logger.warning(
+            "Failed to sync MAX bot commands",
+            error_type=type(exc).__name__,
+        )
 
 
 async def main() -> None:

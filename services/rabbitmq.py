@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from bot.keyboards.report_actions import POSTS_REQUIRING_UNIT_UUID, build_report_keyboard
 from database.requests.orders import delete_orders_for_chat
 from database.requests.settings import get_chat_language, get_default_chat_language
+from security_logging import pseudonymize
 from services.i18n import get_translator
 
 
@@ -61,8 +62,8 @@ async def _resolve_chat_translator(
     except SQLAlchemyError as exc:
         logger.warning(
             "Не удалось загрузить язык чата для RabbitMQ-доставки, используем ru по умолчанию",
-            chat_id=chat_id,
-            error=str(exc),
+            chat_hash=pseudonymize(chat_id),
+            error_type=type(exc).__name__,
         )
         language = "ru"
     return get_translator(language=language or "ru")
@@ -103,11 +104,9 @@ async def _delete_delivery_subscriptions(
             return await delete_orders_for_chat(session, payload.chat_id)
     except SQLAlchemyError as exc:
         logger.bind(
-            chat_id=payload.chat_id,
-            topic_id=payload.topic_id,
-            post=payload.post,
-            unit_uuid=payload.unit_uuid,
-            error=str(exc),
+            chat_hash=pseudonymize(payload.chat_id),
+            object=f"report:{payload.post}",
+            error_type=type(exc).__name__,
         ).warning("Delivery cleanup skipped: failed to delete subscriptions")
         return 0
 
@@ -134,18 +133,16 @@ async def rabbit_listener(
 
                 if payload.post in POSTS_REQUIRING_UNIT_UUID and not payload.unit_uuid:
                     logger.bind(
-                        chat_id=payload.chat_id,
-                        topic_id=payload.topic_id,
-                        queue=queue_name,
-                        post=payload.post,
+                        chat_hash=pseudonymize(payload.chat_id),
+                        component=queue_name,
+                        object=f"report:{payload.post}",
                     ).warning("Keyboard skipped: unit_uuid is missing in payload")
 
                 if payload.topic_id is not None:
                     logger.bind(
-                        chat_id=payload.chat_id,
-                        topic_id=payload.topic_id,
-                        queue=queue_name,
-                        post=payload.post,
+                        chat_hash=pseudonymize(payload.chat_id),
+                        component=queue_name,
+                        object=f"report:{payload.post}",
                     ).info("topic_id is ignored in aida_max/MAX delivery")
 
                 await bot.send_message(
@@ -156,11 +153,9 @@ async def rabbit_listener(
                 )
 
                 logger.bind(
-                    chat_id=payload.chat_id,
-                    topic_id=payload.topic_id,
-                    queue=queue_name,
-                    post=payload.post,
-                    unit_uuid=payload.unit_uuid,
+                    chat_hash=pseudonymize(payload.chat_id),
+                    component=queue_name,
+                    object=f"report:{payload.post}",
                 ).info("Message delivered")
 
             except (MaxBotBadRequestError, MaxBotForbiddenError, MaxBotNotFoundError) as exc:
@@ -170,30 +165,26 @@ async def rabbit_listener(
                         payload=payload,
                     )
                     logger.bind(
-                        chat_id=payload.chat_id,
-                        topic_id=payload.topic_id,
-                        queue=queue_name,
-                        post=payload.post,
-                        unit_uuid=payload.unit_uuid,
-                        deleted=deleted,
-                        reason=exc.__class__.__name__,
+                        chat_hash=pseudonymize(payload.chat_id),
+                        component=queue_name,
+                        object=f"report:{payload.post}",
+                        status=deleted,
+                        error_type=type(exc).__name__,
                     ).info("MAX dialog unavailable; subscriptions removed")
                 else:
                     logger.bind(
-                        chat_id=payload.chat_id if payload else None,
-                        topic_id=payload.topic_id if payload else None,
-                        queue=queue_name,
-                        post=payload.post if payload else None,
-                        unit_uuid=payload.unit_uuid if payload else None,
+                        chat_hash=pseudonymize(payload.chat_id if payload else None),
+                        component=queue_name,
+                        object=f"report:{payload.post}" if payload else "report:unknown",
+                        error_type=type(exc).__name__,
                     ).exception("Failed to send message from RabbitMQ")
 
-            except Exception:
+            except Exception as exc:
                 logger.bind(
-                    chat_id=payload.chat_id if payload else None,
-                    topic_id=payload.topic_id if payload else None,
-                    queue=queue_name,
-                    post=payload.post if payload else None,
-                    unit_uuid=payload.unit_uuid if payload else None,
+                    chat_hash=pseudonymize(payload.chat_id if payload else None),
+                    component=queue_name,
+                    object=f"report:{payload.post}" if payload else "report:unknown",
+                    error_type=type(exc).__name__,
                 ).exception("Failed to send message from RabbitMQ")
 
     try:

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -47,6 +48,16 @@ SECURITY_EVENT_TYPES = frozenset({
     "integration_suspicious",
     "http_5xx",
 })
+
+
+def create_correlation_id(seed: Any = None) -> str:
+    """Create a log-safe correlation ID without exposing an external identifier."""
+
+    if seed is None:
+        return uuid.uuid4().hex
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"{SERVICE_NAME}:{seed}").hex
+
+
 _EMAIL = re.compile(
     r"(?i)[a-z0-9.!#$%&'*+/=?^_\x60{|}~-]+@"
     r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"

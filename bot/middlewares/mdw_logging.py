@@ -9,7 +9,7 @@ from maxo.routing.ctx import Ctx
 from maxo.routing.interfaces.middleware import BaseMiddleware, NextMiddleware
 from maxo.routing.signals.update import MaxoUpdate
 from maxo.types import BotStarted, MessageCallback, MessageCreated
-from security_logging import pseudonymize
+from security_logging import create_correlation_id, pseudonymize
 
 
 def _is_start_message(update: MaxoUpdate[Any]) -> bool:
@@ -28,7 +28,11 @@ class LoggingMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
         next: NextMiddleware[MaxoUpdate[Any]],
     ) -> Any:
         """Добавляет в лог базовый контекст чата и пользователя."""
-        log = logger
+        correlation_id = create_correlation_id()
+        log = logger.bind(
+            request_id=correlation_id,
+            trace_id=correlation_id,
+        )
         inner = update.update
         update_context = ctx.get("update_context")
 
@@ -63,7 +67,11 @@ class LoggingMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
                 )
                 log.info("update")
 
-            return await next(ctx)
+            with logger.contextualize(
+                request_id=correlation_id,
+                trace_id=correlation_id,
+            ):
+                return await next(ctx)
         except Exception:
             log.exception("failed")
             raise

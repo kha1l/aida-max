@@ -29,6 +29,10 @@ class LoggingMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
     ) -> Any:
         """Добавляет в лог базовый контекст чата и пользователя."""
         correlation_id = create_correlation_id()
+        # Один ID проходит через middleware и хендлеры. Audit-событие получает
+        # ту же корреляцию, что и технические логи, без дополнительных строк.
+        ctx["request_id"] = correlation_id
+        ctx["trace_id"] = correlation_id
         log = logger.bind(
             request_id=correlation_id,
             trace_id=correlation_id,
@@ -44,28 +48,31 @@ class LoggingMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
                         chat_hash=pseudonymize(getattr(update_context, "chat_id", None)),
                         user_hash=pseudonymize(getattr(update_context, "user_id", None)),
                     )
-                    log.info("message received")
+                    # Результат `/start` фиксирует стартовый хендлер в
+                    # security_audit; application-дубль не создаём.
             elif isinstance(inner, BotStarted):
                 log = log.bind(
                     update_type="bot_started",
                     chat_hash=pseudonymize(getattr(update_context, "chat_id", None)),
                     user_hash=pseudonymize(getattr(update_context, "user_id", None)),
                 )
-                log.info("bot started")
+                # Результат проверки bot-session аудитирует хендлер.
             elif isinstance(inner, MessageCallback):
                 log = log.bind(
                     update_type="message_callback",
                     chat_hash=pseudonymize(getattr(update_context, "chat_id", None)),
                     user_hash=pseudonymize(getattr(update_context, "user_id", None)),
                 )
-                log.info("callback")
+                # Обычная навигация не является audit-событием и не требует
+                # отдельной application-строки. Контекст сохраняется для ошибки.
             else:
                 log = log.bind(
                     update_type=inner.__class__.__name__,
                     chat_hash=pseudonymize(getattr(update_context, "chat_id", None)),
                     user_hash=pseudonymize(getattr(update_context, "user_id", None)),
                 )
-                log.info("update")
+                # Неизвестный успешный update также не логируем: при исключении
+                # тот же bound-контекст попадёт в единственную error-запись.
 
             with logger.contextualize(
                 request_id=correlation_id,

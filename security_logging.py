@@ -251,6 +251,9 @@ def build_security_event(
         raise ValueError(f"Unsupported security event type: {event_type}")
     if result not in {"success", "failure", "denied"}:
         raise ValueError(f"Unsupported security event result: {result}")
+    correlation_id = request_id or trace_id or create_correlation_id()
+    safe_request_id = redact_text(request_id or correlation_id)
+    safe_trace_id = redact_text(trace_id or correlation_id)
     message = event_type
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -259,8 +262,8 @@ def build_security_event(
         "message": message,
         "event_type": event_type,
         "source": redact_text(source),
-        "request_id": redact_text(request_id) if request_id else None,
-        "trace_id": redact_text(trace_id) if trace_id else None,
+        "request_id": safe_request_id,
+        "trace_id": safe_trace_id,
         "user_hash": pseudonymize(actor),
         "object": redact_text(object_name),
         "result": result,

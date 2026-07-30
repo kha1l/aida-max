@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from loguru import logger
 from maxo.routing.ctx import Ctx
 from maxo.routing.interfaces.middleware import BaseMiddleware, NextMiddleware
 from maxo.routing.signals.update import MaxoUpdate
@@ -13,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.helpers.maxo import resolve_callback_chat_id, resolve_message_chat_id
 from database.requests.users import get_user_context
-from security_logging import pseudonymize
 
 
 class DBSessionMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
@@ -75,19 +73,10 @@ class UserContextMiddleware(BaseMiddleware[MaxoUpdate[Any]]):
 
         current_chat_id = self._resolve_chat_id(update, ctx)
         user_ctx = await get_user_context(session, tg_user, current_chat_id)
-        if user_ctx is None:
-            logger.warning(
-                "Пользователь не найден в базе данных",
-                chat_hash=pseudonymize(current_chat_id),
-                user_hash=pseudonymize(getattr(tg_user, "id", None)),
-            )
-        else:
-            logger.success(
-                "Пользователь успешно загружен из базы данных",
-                chat_hash=pseudonymize(current_chat_id),
-                user_hash=pseudonymize(getattr(tg_user, "id", None)),
-            )
 
+        # Сам lookup выполняется для каждого update и потому не является
+        # security-событием. Его результат аудитируют только стартовые
+        # хендлеры и реальные отказы доступа — без строки на каждое сообщение.
         ctx["user_ctx"] = user_ctx
         # В maxo ключ `ctx` зарезервирован самим dispatcher'ом, поэтому
         # пользовательский контекст кладем только в собственные поля.

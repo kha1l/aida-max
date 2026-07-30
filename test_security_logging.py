@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 from security_logging import (
     SECURITY_EVENT_TYPES,
@@ -59,6 +59,18 @@ class SecurityLoggingTests(unittest.TestCase):
                     self.assertEqual(event["service"], "test-service")
                     self.assertEqual(event["record"]["message"], event_type)
                     self.assertNotIn("test@example.invalid", json.dumps(event))
+
+    def test_security_event_always_has_correlation_ids(self) -> None:
+        event = build_security_event(
+            "access_denied",
+            service=SERVICE_NAME,
+            source="synthetic",
+            result="denied",
+            reason_code="synthetic_test",
+        )
+
+        self.assertRegex(event["request_id"], r"^[0-9a-f]{32}$")
+        self.assertEqual(event["trace_id"], event["request_id"])
 
     def test_pseudonym_is_hmac_and_versioned(self) -> None:
         with patch.dict(
@@ -230,6 +242,7 @@ class SecurityLoggingTests(unittest.TestCase):
 class LoggingMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     async def test_correlation_context_reaches_nested_handler_logs(self) -> None:
         records: list[dict] = []
+        middleware_ctx: dict = {}
         sink_id = loguru_logger.add(
             lambda message: records.append(dict(message.record)),
             filter=lambda record: record["message"] == "nested handler log",
@@ -241,7 +254,7 @@ class LoggingMiddlewareTests(unittest.IsolatedAsyncioTestCase):
 
         update = SimpleNamespace(update=object())
         try:
-            result = await LoggingMiddleware()(update, {}, next_middleware)
+            result = await LoggingMiddleware()(update, middleware_ctx, next_middleware)
         finally:
             loguru_logger.remove(sink_id)
 
@@ -250,6 +263,30 @@ class LoggingMiddlewareTests(unittest.IsolatedAsyncioTestCase):
         extra = records[0]["extra"]
         self.assertRegex(extra["request_id"], r"^[0-9a-f]{32}$")
         self.assertEqual(extra["trace_id"], extra["request_id"])
+        self.assertEqual(middleware_ctx["request_id"], extra["request_id"])
+        self.assertEqual(middleware_ctx["trace_id"], extra["trace_id"])
+
+    async def test_ordinary_update_adds_no_success_log_noise(self) -> None:
+        middleware_records: list[dict] = []
+        sink_id = loguru_logger.add(
+            lambda message: middleware_records.append(dict(message.record)),
+            filter=lambda record: record["module"] == "mdw_logging",
+        )
+
+        async def next_middleware(ctx):
+            return "ok"
+
+        try:
+            result = await LoggingMiddleware()(
+                SimpleNamespace(update=object()),
+                {},
+                next_middleware,
+            )
+        finally:
+            loguru_logger.remove(sink_id)
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(middleware_records, [])
 
 
 class EncryptedFieldsConfigTests(unittest.TestCase):
@@ -330,16 +367,40 @@ class AuthAuditTests(unittest.IsolatedAsyncioTestCase):
                 "synthetic-deeplink",
                 session=session,
                 config=config,
+                request_id="request-1",
+                trace_id="trace-1",
             )
 
-        emit_event.assert_called_once_with(
-            "auth_succeeded",
-            service=SERVICE_NAME,
-            source="max",
-            actor=123456789,
-            object_name="account_binding",
-            result="success",
-            reason_code="deeplink_binding_succeeded",
+        emit_event.assert_has_calls(
+            [
+                call(
+                    "token_used",
+                    service=SERVICE_NAME,
+                    source="max",
+                    actor=123456789,
+                    object_name="account_binding",
+                    result="success",
+                    reason_code="deeplink_credential_accepted",
+                    request_id="request-1",
+                    trace_id="trace-1",
+                ),
+                call(
+                    "auth_succeeded",
+                    service=SERVICE_NAME,
+                    source="max",
+                    actor=123456789,
+                    object_name="account_binding",
+                    result="success",
+                    reason_code="deeplink_binding_succeeded",
+                    request_id="request-1",
+                    trace_id="trace-1",
+                ),
+            ]
+        )
+        self.assertEqual(emit_event.call_count, 2)
+        self.assertNotIn(
+            "synthetic-deeplink",
+            repr(emit_event.call_args_list),
         )
 
     async def test_deeplink_records_auth_failure(self) -> None:
@@ -361,6 +422,8 @@ class AuthAuditTests(unittest.IsolatedAsyncioTestCase):
                 "synthetic-deeplink",
                 session=session,
                 config=config,
+                request_id="request-1",
+                trace_id="trace-1",
             )
 
         emit_event.assert_called_once_with(
@@ -371,6 +434,8 @@ class AuthAuditTests(unittest.IsolatedAsyncioTestCase):
             object_name="account_binding",
             result="failure",
             reason_code="deeplink_binding_failed",
+            request_id="request-1",
+            trace_id="trace-1",
         )
 
     async def test_deeplink_records_missing_user_context_as_failure(self) -> None:
@@ -396,19 +461,39 @@ class AuthAuditTests(unittest.IsolatedAsyncioTestCase):
                 "synthetic-deeplink",
                 session=session,
                 config=config,
+                request_id="request-1",
+                trace_id="trace-1",
             )
 
-        emit_event.assert_called_once_with(
-            "auth_failed",
-            service=SERVICE_NAME,
-            source="max",
-            actor=123456789,
-            object_name="account_binding",
-            result="failure",
-            reason_code="user_context_unavailable",
+        emit_event.assert_has_calls(
+            [
+                call(
+                    "token_used",
+                    service=SERVICE_NAME,
+                    source="max",
+                    actor=123456789,
+                    object_name="account_binding",
+                    result="success",
+                    reason_code="deeplink_credential_accepted",
+                    request_id="request-1",
+                    trace_id="trace-1",
+                ),
+                call(
+                    "auth_failed",
+                    service=SERVICE_NAME,
+                    source="max",
+                    actor=123456789,
+                    object_name="account_binding",
+                    result="failure",
+                    reason_code="user_context_unavailable",
+                    request_id="request-1",
+                    trace_id="trace-1",
+                ),
+            ]
         )
+        self.assertEqual(emit_event.call_count, 2)
 
-    async def test_plain_start_does_not_claim_authentication_success(self) -> None:
+    async def test_plain_start_records_access_denial_without_auth_success(self) -> None:
         from bot.handlers.start_handlers import start_
 
         facade = SimpleNamespace(answer_text=AsyncMock())
@@ -420,10 +505,95 @@ class AuthAuditTests(unittest.IsolatedAsyncioTestCase):
                 SimpleNamespace(),
                 facade,
                 user_ctx=None,
-                event_from_user=SimpleNamespace(fullname="Synthetic User"),
+                event_from_user=SimpleNamespace(
+                    id=123456789,
+                    fullname="Synthetic User",
+                ),
+                request_id="request-1",
+                trace_id="trace-1",
             )
 
-        emit_event.assert_not_called()
+        emit_event.assert_called_once_with(
+            "access_denied",
+            service=SERVICE_NAME,
+            source="max",
+            actor=123456789,
+            object_name="bot_session",
+            result="denied",
+            reason_code="user_context_missing",
+            request_id="request-1",
+            trace_id="trace-1",
+        )
+
+    async def test_plain_start_records_one_auth_success(self) -> None:
+        from bot.handlers.start_handlers import start_
+
+        facade = SimpleNamespace(answer_text=AsyncMock())
+        with patch(
+            "bot.handlers.start_handlers.emit_security_event",
+        ) as emit_event:
+            await start_(
+                SimpleNamespace(),
+                facade,
+                user_ctx={"user_id": 42},
+                event_from_user=SimpleNamespace(
+                    id=123456789,
+                    fullname="Synthetic User",
+                ),
+                request_id="request-1",
+                trace_id="trace-1",
+            )
+
+        emit_event.assert_called_once_with(
+            "auth_succeeded",
+            service=SERVICE_NAME,
+            source="max",
+            actor=123456789,
+            object_name="bot_session",
+            result="success",
+            reason_code="user_context_verified",
+            request_id="request-1",
+            trace_id="trace-1",
+        )
+
+    async def test_legacy_numeric_deeplink_does_not_add_token_event(self) -> None:
+        from bot.handlers.start_handlers import deeplink_start_
+
+        bot_started, facade, config, session = self._context()
+        with (
+            patch(
+                "bot.handlers.start_handlers.bind_max_account",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bot.handlers.start_handlers.get_user_context",
+                new_callable=AsyncMock,
+                return_value={"user_id": 42},
+            ),
+            patch("bot.handlers.start_handlers.main_menu_keyboard", return_value="keyboard"),
+            patch("bot.handlers.start_handlers.emit_security_event") as emit_event,
+        ):
+            await deeplink_start_(
+                bot_started,
+                facade,
+                "42",
+                session=session,
+                config=config,
+                request_id="request-1",
+                trace_id="trace-1",
+            )
+
+        emit_event.assert_called_once_with(
+            "auth_succeeded",
+            service=SERVICE_NAME,
+            source="max",
+            actor=123456789,
+            object_name="account_binding",
+            result="success",
+            reason_code="deeplink_binding_succeeded",
+            request_id="request-1",
+            trace_id="trace-1",
+        )
 
 
 if __name__ == "__main__":

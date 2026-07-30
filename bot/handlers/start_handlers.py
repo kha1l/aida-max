@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, Callable
 from urllib.parse import unquote
 
-from loguru import logger
 from maxo import Router
 from maxo.routing.filters import CommandStart, DeeplinkFilter
 from maxo.routing.facades import BotStartedFacade, MessageCreatedFacade
@@ -17,7 +16,7 @@ from config import Config
 from bot.keyboards.info import new_account
 from bot.keyboards.menu import main_menu_keyboard
 from database.requests.users import get_user_context
-from security_logging import SERVICE_NAME, emit_security_event, pseudonymize
+from security_logging import SERVICE_NAME, emit_security_event
 from services.i18n import tr
 from services.max_auth import MaxBindError, bind_max_account
 
@@ -34,6 +33,15 @@ def _extract_legacy_account_payload(deeplink: str | None) -> tuple[int | None, s
 
 def _resolve_user_id(user: Any) -> int:
     return int(getattr(user, "id", None) or getattr(user, "user_id"))
+
+
+def _resolve_optional_user_id(user: Any | None) -> int | None:
+    """Возвращает ID платформы, не превращая отсутствие контекста в ошибку."""
+
+    if user is None:
+        return None
+    value = getattr(user, "id", None) or getattr(user, "user_id", None)
+    return int(value) if value is not None else None
 
 
 def _resolve_username(user: Any) -> str:
@@ -59,6 +67,8 @@ async def deeplink_start_(
     event_from_user: Any | None = None,
     session: Any | None = None,
     config: Config | None = None,
+    request_id: str | None = None,
+    trace_id: str | None = None,
 ) -> None:
     """Привязывает MAX-пользователя к account из deeplink и открывает меню."""
     max_user = event_from_user or bot_started.user
@@ -74,6 +84,8 @@ async def deeplink_start_(
             object_name="account_binding",
             result="failure",
             reason_code="runtime_context_missing",
+            request_id=request_id,
+            trace_id=trace_id,
         )
         await facade.send_message(
             "Не удалось завершить авторизацию MAX. Пожалуйста, попробуйте еще раз.",
@@ -95,6 +107,21 @@ async def deeplink_start_(
             name=_resolve_full_name(max_user),
             timeout_seconds=config.max_auth.request_timeout_seconds,
         )
+        # Новый deeplink является одноразовым credential. Фиксируем только
+        # факт его успешного использования, но никогда не значение. Для
+        # legacy-ссылки с числовым account_id отдельное token-событие не нужно.
+        if account_id is None:
+            emit_security_event(
+                "token_used",
+                service=SERVICE_NAME,
+                source="max",
+                actor=_resolve_user_id(max_user),
+                object_name="account_binding",
+                result="success",
+                reason_code="deeplink_credential_accepted",
+                request_id=request_id,
+                trace_id=trace_id,
+            )
         user_ctx = await get_user_context(session, max_user, current_chat_id)
         if user_ctx:
             emit_security_event(
@@ -105,12 +132,8 @@ async def deeplink_start_(
                 object_name="account_binding",
                 result="success",
                 reason_code="deeplink_binding_succeeded",
-            )
-            logger.info(
-                "MAX user successfully bound to account from deeplink",
-                chat_hash=pseudonymize(current_chat_id),
-                user_hash=pseudonymize(_resolve_user_id(max_user)),
-                object="account_binding",
+                request_id=request_id,
+                trace_id=trace_id,
             )
         else:
             emit_security_event(
@@ -121,14 +144,10 @@ async def deeplink_start_(
                 object_name="account_binding",
                 result="failure",
                 reason_code="user_context_unavailable",
+                request_id=request_id,
+                trace_id=trace_id,
             )
-            logger.warning(
-                "MAX account binding completed without user context",
-                chat_hash=pseudonymize(current_chat_id),
-                user_hash=pseudonymize(_resolve_user_id(max_user)),
-                object="account_binding",
-            )
-    except MaxBindError as exc:
+    except MaxBindError:
         emit_security_event(
             "auth_failed",
             service=SERVICE_NAME,
@@ -137,13 +156,8 @@ async def deeplink_start_(
             object_name="account_binding",
             result="failure",
             reason_code="deeplink_binding_failed",
-        )
-        logger.warning(
-            "Failed to bind MAX user to account from deeplink",
-            chat_hash=pseudonymize(current_chat_id),
-            user_hash=pseudonymize(_resolve_user_id(max_user)),
-            object="account_binding",
-            error_type=type(exc).__name__,
+            request_id=request_id,
+            trace_id=trace_id,
         )
         await facade.send_message(
             "Не удалось завершить авторизацию MAX. Пожалуйста, начните авторизацию заново из marketplace.",
@@ -170,18 +184,43 @@ async def bot_started_(
     user_ctx: dict[str, Any] | None = None,
     _: Callable[[str], str] = lambda s: s,
     event_from_user: Any | None = None,
+    request_id: str | None = None,
+    trace_id: str | None = None,
 ) -> None:
     """Открывает меню при обычном запуске MAX-бота без deeplink."""
     max_user = event_from_user or bot_started.user
     user_name = resolve_user_display_name(max_user)
+    actor_id = _resolve_optional_user_id(max_user)
 
     if not user_ctx:
+        emit_security_event(
+            "access_denied",
+            service=SERVICE_NAME,
+            source="max",
+            actor=actor_id,
+            object_name="bot_session",
+            result="denied",
+            reason_code="user_context_missing",
+            request_id=request_id,
+            trace_id=trace_id,
+        )
         await facade.send_message(
             tr(_, MenuTexts.AUTH_REQUIRED_MESSAGE, user_name=user_name),
             keyboard=new_account(_),
         )
         return
 
+    emit_security_event(
+        "auth_succeeded",
+        service=SERVICE_NAME,
+        source="max",
+        actor=actor_id,
+        object_name="bot_session",
+        result="success",
+        reason_code="user_context_verified",
+        request_id=request_id,
+        trace_id=trace_id,
+    )
     await facade.send_message(
         tr(_, MenuTexts.MAIN_GREETING, user_name=user_name),
         keyboard=main_menu_keyboard(_),
@@ -195,17 +234,42 @@ async def start_(
     user_ctx: dict[str, Any] | None = None,
     _: Callable[[str], str] = lambda s: s,
     event_from_user: Any | None = None,
+    request_id: str | None = None,
+    trace_id: str | None = None,
 ) -> None:
     """Открывает меню по текстовой команде `/start`."""
     user_name = resolve_user_display_name(event_from_user)
+    actor_id = _resolve_optional_user_id(event_from_user)
 
     if not user_ctx:
+        emit_security_event(
+            "access_denied",
+            service=SERVICE_NAME,
+            source="max",
+            actor=actor_id,
+            object_name="bot_session",
+            result="denied",
+            reason_code="user_context_missing",
+            request_id=request_id,
+            trace_id=trace_id,
+        )
         await facade.answer_text(
             tr(_, MenuTexts.AUTH_REQUIRED_MESSAGE, user_name=user_name),
             keyboard=new_account(_),
         )
         return
 
+    emit_security_event(
+        "auth_succeeded",
+        service=SERVICE_NAME,
+        source="max",
+        actor=actor_id,
+        object_name="bot_session",
+        result="success",
+        reason_code="user_context_verified",
+        request_id=request_id,
+        trace_id=trace_id,
+    )
     await facade.answer_text(
         tr(_, MenuTexts.MAIN_GREETING, user_name=user_name),
         keyboard=main_menu_keyboard(_),
